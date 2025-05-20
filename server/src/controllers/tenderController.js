@@ -8,7 +8,9 @@ import cloudinary from '../config/cloudinary.js';
 // @route   GET /api/tenders
 // @access  Private
 export const getTenders = asyncHandler(async (req, res) => {
-  const tenders = await Tender.find({});
+  const tenders = await Tender.find({})
+    .sort({ dueDate: 1 }) // Sort by due date ascending
+    .populate('submittedBy', 'name email');
   res.json(tenders);
 });
 
@@ -16,7 +18,8 @@ export const getTenders = asyncHandler(async (req, res) => {
 // @route   GET /api/tenders/:id
 // @access  Private
 export const getTenderById = asyncHandler(async (req, res) => {
-  const tender = await Tender.findById(req.params.id);
+  const tender = await Tender.findById(req.params.id)
+    .populate('submittedBy', 'name email');
 
   if (tender) {
     res.json(tender);
@@ -59,6 +62,51 @@ export const createTender = asyncHandler(async (req, res) => {
   res.status(201).json(tender);
 });
 
+// @desc    Update tender
+// @route   PUT /api/tenders/:id
+// @access  Private/Admin
+export const updateTender = asyncHandler(async (req, res) => {
+  const tender = await Tender.findById(req.params.id);
+
+  if (!tender) {
+    res.status(404);
+    throw new Error('Tender not found');
+  }
+
+  // Update document if new file is uploaded
+  let documentUrl = tender.documentUrl;
+  if (req.file) {
+    // Extract public ID from current document URL
+    const publicId = tender.documentUrl
+      .split('/')
+      .slice(-1)[0]
+      .split('.')[0];
+
+    // Delete old file from Cloudinary
+    await cloudinary.uploader.destroy(`tenders/${publicId}`);
+
+    // Upload new file
+    const result = await cloudinary.uploader.upload(req.file.path, {
+      folder: 'tenders',
+      resource_type: 'auto',
+    });
+
+    // Remove file from server after upload
+    fs.unlinkSync(req.file.path);
+    documentUrl = result.secure_url;
+  }
+
+  // Update tender
+  tender.organization = req.body.organization || tender.organization;
+  tender.description = req.body.description || tender.description;
+  tender.dueDate = req.body.dueDate || tender.dueDate;
+  tender.price = req.body.price || tender.price;
+  tender.documentUrl = documentUrl;
+
+  const updatedTender = await tender.save();
+  res.json(updatedTender);
+});
+
 // @desc    Update tender status
 // @route   PATCH /api/tenders/:id/status
 // @access  Private/Admin
@@ -75,39 +123,6 @@ export const updateTenderStatus = asyncHandler(async (req, res) => {
     res.status(404);
     throw new Error('Tender not found');
   }
-});
-
-// @desc    Upload document to tender
-// @route   POST /api/tenders/:id/documents
-// @access  Private
-export const uploadTenderDocument = asyncHandler(async (req, res) => {
-  const tender = await Tender.findById(req.params.id);
-
-  if (!tender) {
-    res.status(404);
-    throw new Error('Tender not found');
-  }
-
-  // Check if file exists
-  if (!req.file) {
-    res.status(400);
-    throw new Error('Please upload a document');
-  }
-
-  // Upload file to Cloudinary
-  const result = await cloudinary.uploader.upload(req.file.path, {
-    folder: 'tenders',
-    resource_type: 'auto',
-  });
-
-  // Remove file from server after upload
-  fs.unlinkSync(req.file.path);
-
-  // Update tender with new document URL
-  tender.documentUrl = result.secure_url;
-  const updatedTender = await tender.save();
-
-  res.json(updatedTender);
 });
 
 // @desc    Delete a tender

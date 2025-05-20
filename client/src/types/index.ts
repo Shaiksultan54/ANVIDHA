@@ -14,6 +14,12 @@ export interface AuthState {
   error: string | null;
 }
 
+export interface TenderSubmitter {
+  _id: string;
+  name: string;
+  email: string;
+}
+
 export interface Tender {
   _id: string;
   tenderId: string;
@@ -23,7 +29,7 @@ export interface Tender {
   documentUrl: string;
   price: number;
   status: 'pending' | 'approved' | 'rejected';
-  submittedBy?: string;
+  submittedBy: TenderSubmitter;
   createdAt: string;
   updatedAt: string;
 }

@@ -35,6 +35,30 @@ export const createTender = async (formData: TenderFormData): Promise<Tender> =>
   return response.data;
 };
 
+// Update tender details and optionally upload new document
+export const updateTender = async (
+  id: string,
+  formData: TenderFormData
+): Promise<Tender> => {
+  const form = new FormData();
+  form.append('organization', formData.organization);
+  form.append('description', formData.description);
+  form.append('dueDate', formData.dueDate);
+  form.append('price', formData.price.toString());
+  
+  if (formData.document) {
+    form.append('document', formData.document);
+  }
+
+  const response = await api.put(`/tenders/${id}`, form, {
+    headers: {
+      'Content-Type': 'multipart/form-data',
+    },
+  });
+  
+  return response.data;
+};
+
 // Update tender status (admin only)
 export const updateTenderStatus = async (
   id: string,
@@ -47,21 +71,4 @@ export const updateTenderStatus = async (
 // Delete a tender (admin only)
 export const deleteTender = async (id: string): Promise<void> => {
   await api.delete(`/tenders/${id}`);
-};
-
-// Upload a document to a tender
-export const uploadTenderDocument = async (
-  id: string,
-  document: File
-): Promise<Tender> => {
-  const form = new FormData();
-  form.append('document', document);
-
-  const response = await api.post(`/tenders/${id}/documents`, form, {
-    headers: {
-      'Content-Type': 'multipart/form-data',
-    },
-  });
-  
-  return response.data;
 };

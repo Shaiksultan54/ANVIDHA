@@ -9,12 +9,15 @@ import {
   DollarSign, 
   Download, 
   FileText, 
+  Pencil,
+  Save,
   X 
 } from 'lucide-react';
 import { toast } from 'react-hot-toast';
-import { Tender } from '../../types';
+import { Tender, TenderFormData } from '../../types';
 import { 
   getTenderById, 
+  updateTender,
   updateTenderStatus, 
   deleteTender 
 } from '../../services/tenderService';
@@ -26,9 +29,19 @@ const TenderDetails: React.FC = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [isUpdating, setIsUpdating] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const navigate = useNavigate();
   const { user } = useAuth();
   const isAdmin = user?.role === 'admin';
+
+  // Form state
+  const [formData, setFormData] = useState({
+    organization: '',
+    description: '',
+    dueDate: '',
+    price: 0,
+  });
 
   useEffect(() => {
     const fetchTender = async () => {
@@ -36,6 +49,12 @@ const TenderDetails: React.FC = () => {
         if (id) {
           const data = await getTenderById(id);
           setTender(data);
+          setFormData({
+            organization: data.organization,
+            description: data.description,
+            dueDate: new Date(data.dueDate).toISOString().split('T')[0],
+            price: data.price,
+          });
         }
       } catch (error) {
         console.error('Error fetching tender:', error);
@@ -80,6 +99,42 @@ const TenderDetails: React.FC = () => {
       console.error('Error deleting tender:', error);
       toast.error('Failed to delete tender');
       setIsDeleting(false);
+    }
+  };
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      if (file.size > 5 * 1024 * 1024) { // 5MB limit
+        toast.error('File size must be less than 5MB');
+        return;
+      }
+      setSelectedFile(file);
+    }
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!id) return;
+
+    try {
+      setIsUpdating(true);
+      const updateData: TenderFormData = {
+        ...formData,
+        document: selectedFile ?? undefined,
+      };
+      
+
+
+      const updatedTender = await updateTender(id, updateData);
+      setTender(updatedTender);
+      setIsEditing(false);
+      toast.success('Tender updated successfully');
+    } catch (error) {
+      console.error('Error updating tender:', error);
+      toast.error('Failed to update tender');
+    } finally {
+      setIsUpdating(false);
     }
   };
 
@@ -162,18 +217,37 @@ const TenderDetails: React.FC = () => {
 
         {isAdmin && (
           <div className="flex space-x-3">
-            <button
-              onClick={handleDelete}
-              disabled={isDeleting}
-              className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {isDeleting ? 'Deleting...' : 'Delete Tender'}
-            </button>
+            {!isEditing ? (
+              <>
+                <button
+                  onClick={() => setIsEditing(true)}
+                  className="inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+                >
+                  <Pencil className="mr-2 h-4 w-4" />
+                  Edit Tender
+                </button>
+                <button
+                  onClick={handleDelete}
+                  disabled={isDeleting}
+                  className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {isDeleting ? 'Deleting...' : 'Delete Tender'}
+                </button>
+              </>
+            ) : (
+              <button
+                onClick={() => setIsEditing(false)}
+                className="inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+              >
+                <X className="mr-2 h-4 w-4" />
+                Cancel Editing
+              </button>
+            )}
           </div>
         )}
       </div>
 
-      {/* Tender Header */}
+      {/* Tender Content */}
       <div className="bg-white shadow rounded-lg overflow-hidden">
         <div className="px-4 py-5 sm:px-6 bg-gray-50">
           <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center">
@@ -192,69 +266,198 @@ const TenderDetails: React.FC = () => {
           </div>
           <p className="mt-1 max-w-2xl text-sm text-gray-500">
             Created on {formatCreationDate(tender.createdAt)}
+            {tender.submittedBy && (
+              <> by {tender.submittedBy.name} ({tender.submittedBy.email})</>
+            )}
           </p>
         </div>
 
         {/* Tender Details */}
-        <div className="border-t border-gray-200 px-4 py-5 sm:p-6">
-          <dl className="grid grid-cols-1 gap-x-4 gap-y-6 sm:grid-cols-2">
-            <div className="sm:col-span-1">
-              <dt className="text-sm font-medium text-gray-500 flex items-center">
-                <Building className="mr-1 h-4 w-4 text-gray-400" />
-                Organization
-              </dt>
-              <dd className="mt-1 text-sm text-gray-900">{tender.organization}</dd>
+        {isEditing ? (
+          <form onSubmit={handleSubmit} className="border-t border-gray-200 px-4 py-5 sm:p-6">
+            <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
+              <div>
+                <label htmlFor="organization" className="block text-sm font-medium text-gray-700">
+                  Organization
+                </label>
+                <div className="mt-1 relative rounded-md shadow-sm">
+                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                    <Building className="h-5 w-5 text-gray-400" />
+                  </div>
+                  <input
+                    type="text"
+                    id="organization"
+                    value={formData.organization}
+                    onChange={(e) => setFormData({ ...formData, organization: e.target.value })}
+                    className="pl-10 focus:ring-indigo-500 focus:border-indigo-500 block w-full sm:text-sm border-gray-300 rounded-md"
+                    required
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label htmlFor="dueDate" className="block text-sm font-medium text-gray-700">
+                  Due Date
+                </label>
+                <div className="mt-1 relative rounded-md shadow-sm">
+                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                    <Calendar className="h-5 w-5 text-gray-400" />
+                  </div>
+                  <input
+                    type="date"
+                    id="dueDate"
+                    value={formData.dueDate}
+                    onChange={(e) => setFormData({ ...formData, dueDate: e.target.value })}
+                    className="pl-10 focus:ring-indigo-500 focus:border-indigo-500 block w-full sm:text-sm border-gray-300 rounded-md"
+                    required
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label htmlFor="price" className="block text-sm font-medium text-gray-700">
+                  Price (USD)
+                </label>
+                <div className="mt-1 relative rounded-md shadow-sm">
+                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                    <DollarSign className="h-5 w-5 text-gray-400" />
+                  </div>
+                  <input
+                    type="number"
+                    id="price"
+                    value={formData.price}
+                    onChange={(e) => setFormData({ ...formData, price: Number(e.target.value) })}
+                    className="pl-10 focus:ring-indigo-500 focus:border-indigo-500 block w-full sm:text-sm border-gray-300 rounded-md"
+                    min="0"
+                    step="0.01"
+                    required
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label htmlFor="document" className="block text-sm font-medium text-gray-700">
+                  Update Document (Optional)
+                </label>
+                <div className="mt-1">
+                  <input
+                    type="file"
+                    id="document"
+                    onChange={handleFileChange}
+                    className="focus:ring-indigo-500 focus:border-indigo-500 block w-full sm:text-sm border-gray-300 rounded-md"
+                    accept=".pdf,.doc,.docx"
+                  />
+                </div>
+                <p className="mt-1 text-sm text-gray-500">
+                  Current document: <a href={tender.documentUrl} target="_blank" rel="noopener noreferrer" className="text-indigo-600 hover:text-indigo-900">View</a>
+                </p>
+              </div>
+
+              <div className="sm:col-span-2">
+                <label htmlFor="description" className="block text-sm font-medium text-gray-700">
+                  Description
+                </label>
+                <div className="mt-1">
+                  <textarea
+                    id="description"
+                    rows={4}
+                    value={formData.description}
+                    onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                    className="focus:ring-indigo-500 focus:border-indigo-500 block w-full sm:text-sm border-gray-300 rounded-md"
+                    required
+                  />
+                </div>
+              </div>
             </div>
 
-            <div className="sm:col-span-1">
-              <dt className="text-sm font-medium text-gray-500 flex items-center">
-                <Calendar className="mr-1 h-4 w-4 text-gray-400" />
-                Due Date
-              </dt>
-              <dd className="mt-1 text-sm text-gray-900">
-                {formatDate(tender.dueDate)}
-              </dd>
+            <div className="mt-6 flex justify-end space-x-3">
+              <button
+                type="button"
+                onClick={() => setIsEditing(false)}
+                className="inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={isUpdating}
+                className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {isUpdating ? (
+                  <>
+                    <span className="mr-2 inline-block h-4 w-4 rounded-full border-2 border-white border-t-transparent animate-spin"></span>
+                    Saving...
+                  </>
+                ) : (
+                  <>
+                    <Save className="mr-2 h-4 w-4" />
+                    Save Changes
+                  </>
+                )}
+              </button>
             </div>
+          </form>
+        ) : (
+          <div className="border-t border-gray-200 px-4 py-5 sm:p-6">
+            <dl className="grid grid-cols-1 gap-x-4 gap-y-6 sm:grid-cols-2">
+              <div className="sm:col-span-1">
+                <dt className="text-sm font-medium text-gray-500 flex items-center">
+                  <Building className="mr-1 h-4 w-4 text-gray-400" />
+                  Organization
+                </dt>
+                <dd className="mt-1 text-sm text-gray-900">{tender.organization}</dd>
+              </div>
 
-            <div className="sm:col-span-1">
-              <dt className="text-sm font-medium text-gray-500 flex items-center">
-                <DollarSign className="mr-1 h-4 w-4 text-gray-400" />
-                Price
-              </dt>
-              <dd className="mt-1 text-sm text-gray-900">
-                ${tender.price.toLocaleString()}
-              </dd>
-            </div>
+              <div className="sm:col-span-1">
+                <dt className="text-sm font-medium text-gray-500 flex items-center">
+                  <Calendar className="mr-1 h-4 w-4 text-gray-400" />
+                  Due Date
+                </dt>
+                <dd className="mt-1 text-sm text-gray-900">
+                  {formatDate(tender.dueDate)}
+                </dd>
+              </div>
 
-            <div className="sm:col-span-1">
-              <dt className="text-sm font-medium text-gray-500 flex items-center">
-                <FileText className="mr-1 h-4 w-4 text-gray-400" />
-                Document
-              </dt>
-              <dd className="mt-1 text-sm text-gray-900">
-                <a
-                  href={tender.documentUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center text-indigo-600 hover:text-indigo-900"
-                >
-                  <Download className="mr-1 h-4 w-4" />
-                  Download Document
-                </a>
-              </dd>
-            </div>
+              <div className="sm:col-span-1">
+                <dt className="text-sm font-medium text-gray-500 flex items-center">
+                  <DollarSign className="mr-1 h-4 w-4 text-gray-400" />
+                  Price
+                </dt>
+                <dd className="mt-1 text-sm text-gray-900">
+                  ${tender.price.toLocaleString()}
+                </dd>
+              </div>
 
-            <div className="sm:col-span-2">
-              <dt className="text-sm font-medium text-gray-500">Description</dt>
-              <dd className="mt-1 text-sm text-gray-900 whitespace-pre-line">
-                {tender.description}
-              </dd>
-            </div>
-          </dl>
-        </div>
+              <div className="sm:col-span-1">
+                <dt className="text-sm font-medium text-gray-500 flex items-center">
+                  <FileText className="mr-1 h-4 w-4 text-gray-400" />
+                  Document
+                </dt>
+                <dd className="mt-1 text-sm text-gray-900">
+                  <a
+                    href={tender.documentUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center text-indigo-600 hover:text-indigo-900"
+                  >
+                    <Download className="mr-1 h-4 w-4" />
+                    Download Document
+                  </a>
+                </dd>
+              </div>
+
+              <div className="sm:col-span-2">
+                <dt className="text-sm font-medium text-gray-500">Description</dt>
+                <dd className="mt-1 text-sm text-gray-900 whitespace-pre-line">
+                  {tender.description}
+                </dd>
+              </div>
+            </dl>
+          </div>
+        )}
 
         {/* Admin Actions */}
-        {isAdmin && (
+        {isAdmin && !isEditing && (
           <div className="border-t border-gray-200 px-4 py-5 sm:px-6 bg-gray-50">
             <h4 className="text-sm font-medium text-gray-500">Update Status</h4>
             <div className="mt-2 flex flex-wrap gap-3">

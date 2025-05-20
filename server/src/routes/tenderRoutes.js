@@ -3,8 +3,8 @@ import {
   getTenders,
   getTenderById,
   createTender,
+  updateTender,
   updateTenderStatus,
-  uploadTenderDocument,
   deleteTender,
 } from '../controllers/tenderController.js';
 import { protect, admin } from '../middleware/authMiddleware.js';
@@ -20,14 +20,11 @@ router
 router
   .route('/:id')
   .get(protect, getTenderById)
+  .put(protect, admin, upload.single('document'), updateTender)
   .delete(protect, admin, deleteTender);
 
 router
   .route('/:id/status')
   .patch(protect, admin, updateTenderStatus);
-
-router
-  .route('/:id/documents')
-  .post(protect, upload.single('document'), uploadTenderDocument);
 
 export default router;
