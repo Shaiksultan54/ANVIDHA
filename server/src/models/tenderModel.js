@@ -1,55 +1,76 @@
 import mongoose from 'mongoose';
 
-// Generate tender ID
-function generateTenderId() {
-  // Format: TDR-YEAR-RANDOM (e.g., TDR-2023-12345)
-  const year = new Date().getFullYear();
-  const random = Math.floor(10000 + Math.random() * 90000); // 5-digit random number
-  return `TDR-${year}-${random}`;
-}
+// Document schema for multiple files
+const documentSchema = mongoose.Schema({
+  filename: { type: String, required: true },
+  originalName: { type: String, required: true },
+  url: { type: String, required: true },
+  size: { type: Number, required: true },
+  mimetype: { type: String, required: true },
+  cloudinaryId: { type: String, required: true },
+}, {
+  _id: true,
+  timestamps: true,
+});
 
-const tenderSchema = mongoose.Schema(
-  {
-    tenderId: {
-      type: String,
-      default: generateTenderId,
-      unique: true,
-    },
-    organization: {
-      type: String,
-      required: true,
-    },
-    description: {
-      type: String,
-      required: true,
-    },
-    dueDate: {
-      type: Date,
-      required: true,
-    },
-    documentUrl: {
-      type: String,
-      required: true,
-    },
-    price: {
-      type: Number,
-      required: true,
-      default: 0,
-    },
-    status: {
-      type: String,
-      enum: ['pending', 'approved', 'rejected'],
-      default: 'pending',
-    },
-    submittedBy: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: 'User',
-    },
+// Attribute schema for additional key-value pairs
+const attributeSchema = mongoose.Schema({
+  key: { type: String, required: true, trim: true },
+  value: { type: String, required: true, trim: true },
+}, {
+  _id: false,
+});
+
+const tenderSchema = mongoose.Schema({
+  tenderId: {
+    type: String,
+    required: true,
+    unique: true,
+    index: true,
+    trim: true,
   },
-  {
-    timestamps: true,
-  }
-);
+  organization: {
+    type: String,
+    required: true,
+    trim: true,
+  },
+  description: {
+    type: String,
+    required: true,
+  },
+  dueDate: {
+    type: Date,
+    required: true,
+    index: true,
+  },
+  documents: [documentSchema],
+  price: {
+    type: Number,
+    required: true,
+    default: 0,
+    min: 0,
+  },
+  status: {
+    type: String,
+    enum: ['pending', 'approved', 'rejected'],
+    default: 'pending',
+    index: true,
+  },
+  attributes: [attributeSchema],
+  submittedBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    required: true,
+    index: true,
+  },
+}, {
+  timestamps: true,
+});
+
+// Add indexes for better query performance
+tenderSchema.index({ createdAt: -1 });
+tenderSchema.index({ dueDate: 1, status: 1 });
+tenderSchema.index({ organization: 1 });
 
 const Tender = mongoose.model('Tender', tenderSchema);
 

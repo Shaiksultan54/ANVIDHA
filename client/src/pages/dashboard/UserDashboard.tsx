@@ -14,7 +14,7 @@ const UserDashboard: React.FC = () => {
     const fetchTenders = async () => {
       try {
         const data = await getAllTenders();
-        setTenders(data);
+        setTenders(data.tenders);
       } catch (error) {
         console.error('Error fetching tenders:', error);
       } finally {

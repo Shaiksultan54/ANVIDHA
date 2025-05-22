@@ -4,13 +4,15 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { toast } from 'react-hot-toast';
 import { useNavigate } from 'react-router-dom';
-import { Building, Calendar, IndianRupee, FileText, Upload, X } from 'lucide-react';
+import { Building, Calendar, IndianRupee, FileText, Upload, X, Plus, Trash } from 'lucide-react';
 import { createTender } from '../../services/tenderService';
-import { TenderFormData } from '../../types';
+import { TenderFormData, TenderAttribute } from '../../types';
+import { useAuth } from '../../context/AuthContext';
 
-const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
+const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB per file
 
 const tenderSchema = z.object({
+  tenderId: z.string().min(1, 'Tender ID is required'),
   organization: z.string().min(2, 'Organization name is required'),
   description: z.string().min(10, 'Description must be at least 10 characters'),
   dueDate: z.string().refine(val => !isNaN(Date.parse(val)), {
@@ -22,10 +24,13 @@ const tenderSchema = z.object({
 type TenderFormValues = z.infer<typeof tenderSchema>;
 
 const TenderUpload: React.FC = () => {
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const [fileError, setFileError] = useState<string | null>(null);
+  const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
+  const [fileErrors, setFileErrors] = useState<string[]>([]);
+  const [attributes, setAttributes] = useState<TenderAttribute[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const navigate = useNavigate();
+  const { user } = useAuth();
+  const isAdmin = user?.role === 'admin';
   
   const {
     register,
@@ -34,43 +39,64 @@ const TenderUpload: React.FC = () => {
   } = useForm<TenderFormValues>({
     resolver: zodResolver(tenderSchema),
     defaultValues: {
+      tenderId: '',
       organization: '',
       description: '',
-      dueDate: new Date().toISOString().split('T')[0], // Today's date in YYYY-MM-DD format
+      dueDate: new Date().toISOString().split('T')[0],
       price: 0,
     },
   });
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    setFileError(null);
+    const files = Array.from(e.target.files || []);
+    const newErrors: string[] = [];
+    const validFiles: File[] = [];
     
-    if (!file) {
-      return;
-    }
-    
-    if (file.size > MAX_FILE_SIZE) {
-      setFileError(`File size (${(file.size / 1024 / 1024).toFixed(2)}MB) exceeds the maximum limit of 5MB`);
-      return;
-    }
+    files.forEach(file => {
+      if (file.size > MAX_FILE_SIZE) {
+        newErrors.push(`${file.name}: File size exceeds 5MB limit`);
+        return;
+      }
 
-    const allowedTypes = ['application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'];
-    if (!allowedTypes.includes(file.type)) {
-      setFileError('Only PDF and Word documents are allowed');
-      return;
-    }
-    
-    setSelectedFile(file);
+      const allowedTypes = ['application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'];
+      if (!allowedTypes.includes(file.type)) {
+        newErrors.push(`${file.name}: Only PDF and Word documents are allowed`);
+        return;
+      }
+
+      validFiles.push(file);
+    });
+
+    setFileErrors(newErrors);
+    setSelectedFiles(prev => [...prev, ...validFiles]);
   };
 
-  const removeFile = () => {
-    setSelectedFile(null);
-    setFileError(null);
+  const removeFile = (index: number) => {
+    setSelectedFiles(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const addAttribute = () => {
+    setAttributes(prev => [...prev, { key: '', value: '' }]);
+  };
+
+  const removeAttribute = (index: number) => {
+    setAttributes(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const updateAttribute = (index: number, field: 'key' | 'value', value: string) => {
+    setAttributes(prev => prev.map((attr, i) => 
+      i === index ? { ...attr, [field]: value } : attr
+    ));
   };
 
   const onSubmit = async (data: TenderFormValues) => {
-    if (!selectedFile) {
-      setFileError('Document is required');
+    if (selectedFiles.length === 0) {
+      toast.error('At least one document is required');
+      return;
+    }
+
+    if (isAdmin && attributes.some(attr => !attr.key || !attr.value)) {
+      toast.error('All attribute fields must be filled');
       return;
     }
 
@@ -79,7 +105,8 @@ const TenderUpload: React.FC = () => {
     try {
       const formData: TenderFormData = {
         ...data,
-        document: selectedFile,
+        documents: selectedFiles,
+        attributes: isAdmin ? attributes : undefined,
       };
       
       await createTender(formData);
@@ -106,6 +133,26 @@ const TenderUpload: React.FC = () => {
         <div className="p-6">
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
             <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
+              <div>
+                <label htmlFor="tenderId" className="block text-sm font-medium text-gray-700">
+                  Tender ID
+                </label>
+                <div className="mt-1">
+                  <input
+                    type="text"
+                    id="tenderId"
+                    className={`block w-full py-2 px-3 border ${
+                      errors.tenderId ? 'border-red-300' : 'border-gray-300'
+                    } rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm`}
+                    placeholder="Enter tender ID"
+                    {...register('tenderId')}
+                  />
+                </div>
+                {errors.tenderId && (
+                  <p className="mt-1 text-sm text-red-600">{errors.tenderId.message}</p>
+                )}
+              </div>
+
               <div>
                 <label htmlFor="organization" className="block text-sm font-medium text-gray-700">
                   Organization
@@ -153,11 +200,10 @@ const TenderUpload: React.FC = () => {
 
               <div>
                 <label htmlFor="price" className="block text-sm font-medium text-gray-700">
-                  Price (IND)
+                  Price (₹)
                 </label>
                 <div className="mt-1 relative rounded-md shadow-sm">
                   <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                    {/* <DollarSign className="h-5 w-5 text-gray-400" /> */}
                     <IndianRupee className="h-5 w-5 text-gray-400" />
                   </div>
                   <input
@@ -167,8 +213,8 @@ const TenderUpload: React.FC = () => {
                       errors.price ? 'border-red-300' : 'border-gray-300'
                     } rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm`}
                     min="0"
-                    step="0.01"
-                    placeholder="0.00"
+                    step="1"
+                    placeholder="0"
                     {...register('price')}
                   />
                 </div>
@@ -177,78 +223,125 @@ const TenderUpload: React.FC = () => {
                 )}
               </div>
 
-              <div>
-                <label htmlFor="document" className="block text-sm font-medium text-gray-700">
-                  Tender Document
-                </label>
-                <div className="mt-1">
-                  {!selectedFile ? (
-                    <div className="max-w-lg flex justify-center px-6 pt-5 pb-6 border-2 border-gray-300 border-dashed rounded-md">
-                      <div className="space-y-1 text-center">
-                        <FileText className="mx-auto h-12 w-12 text-gray-400" />
-                        <div className="flex text-sm text-gray-600">
-                          <label
-                            htmlFor="document"
-                            className="relative cursor-pointer bg-white rounded-md font-medium text-indigo-600 hover:text-indigo-500 focus-within:outline-none focus-within:ring-2 focus-within:ring-offset-2 focus-within:ring-indigo-500"
-                          >
-                            <span>Upload a document</span>
-                            <input
-                              id="document"
-                              name="document"
-                              type="file"
-                              className="sr-only"
-                              accept=".pdf,.doc,.docx"
-                              onChange={handleFileChange}
-                            />
-                          </label>
-                          <p className="pl-1">or drag and drop</p>
-                        </div>
-                        <p className="text-xs text-gray-500">PDF or Word up to 5MB</p>
+              {isAdmin && (
+                <div className="sm:col-span-2">
+                  <label className="block text-sm font-medium text-gray-700">
+                    Additional Attributes
+                  </label>
+                  <div className="mt-2 space-y-3">
+                    {attributes.map((attr, index) => (
+                      <div key={index} className="flex gap-3">
+                        <input
+                          type="text"
+                          placeholder="Attribute name"
+                          value={attr.key}
+                          onChange={(e) => updateAttribute(index, 'key', e.target.value)}
+                          className="flex-1 block w-full py-2 px-3 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                        />
+                        <input
+                          type="text"
+                          placeholder="Value"
+                          value={attr.value}
+                          onChange={(e) => updateAttribute(index, 'value', e.target.value)}
+                          className="flex-1 block w-full py-2 px-3 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => removeAttribute(index)}
+                          className="inline-flex items-center p-2 border border-transparent rounded-md text-red-600 hover:bg-red-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
+                        >
+                          <Trash className="h-5 w-5" />
+                        </button>
                       </div>
-                    </div>
-                  ) : (
-                    <div className="max-w-lg flex items-center p-4 border border-gray-300 rounded-md">
+                    ))}
+                    <button
+                      type="button"
+                      onClick={addAttribute}
+                      className="inline-flex items-center px-4 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+                    >
+                      <Plus className="mr-2 h-4 w-4" />
+                      Add Attribute
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              <div className="sm:col-span-2">
+                <label className="block text-sm font-medium text-gray-700">
+                  Tender Documents
+                </label>
+                <div className="mt-2 space-y-4">
+                  {selectedFiles.map((file, index) => (
+                    <div key={index} className="flex items-center p-4 border border-gray-300 rounded-md">
                       <FileText className="h-6 w-6 text-gray-400 mr-2" />
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-medium text-gray-900 truncate">
-                          {selectedFile.name}
+                          {file.name}
                         </p>
                         <p className="text-xs text-gray-500">
-                          {(selectedFile.size / 1024 / 1024).toFixed(2)} MB
+                          {(file.size / 1024 / 1024).toFixed(2)} MB
                         </p>
                       </div>
                       <button
                         type="button"
-                        onClick={removeFile}
+                        onClick={() => removeFile(index)}
                         className="ml-4 text-red-600 hover:text-red-900"
                       >
                         <X className="h-5 w-5" />
                       </button>
                     </div>
-                  )}
+                  ))}
+                  
+                  <div className="flex justify-center px-6 pt-5 pb-6 border-2 border-gray-300 border-dashed rounded-md">
+                    <div className="space-y-1 text-center">
+                      <FileText className="mx-auto h-12 w-12 text-gray-400" />
+                      <div className="flex text-sm text-gray-600">
+                        <label
+                          htmlFor="documents"
+                          className="relative cursor-pointer bg-white rounded-md font-medium text-indigo-600 hover:text-indigo-500 focus-within:outline-none focus-within:ring-2 focus-within:ring-offset-2 focus-within:ring-indigo-500"
+                        >
+                          <span>Upload documents</span>
+                          <input
+                            id="documents"
+                            name="documents"
+                            type="file"
+                            className="sr-only"
+                            accept=".pdf,.doc,.docx"
+                            multiple
+                            onChange={handleFileChange}
+                          />
+                        </label>
+                        <p className="pl-1">or drag and drop</p>
+                      </div>
+                      <p className="text-xs text-gray-500">PDF or Word up to 5MB each</p>
+                    </div>
+                  </div>
+                  
+                  {fileErrors.map((error, index) => (
+                    <p key={index} className="text-sm text-red-600">{error}</p>
+                  ))}
                 </div>
-                {fileError && <p className="mt-1 text-sm text-red-600">{fileError}</p>}
               </div>
-            </div>
 
-            <div>
-              <label htmlFor="description" className="block text-sm font-medium text-gray-700">
-                Description
-              </label>
-              <div className="mt-1">
-                <textarea
-                  id="description"
-                  rows={4}
-                  className={`block w-full py-2 px-3 border ${
-                    errors.description ? 'border-red-300' : 'border-gray-300'
-                  } rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm`}
-                  placeholder="Enter a detailed description of the tender..."
-                  {...register('description')}
-                />
+              <div className="sm:col-span-2">
+                <label htmlFor="description" className="block text-sm font-medium text-gray-700">
+                  Description
+                </label>
+                <div className="mt-1">
+                  <textarea
+                    id="description"
+                    rows={4}
+                    className={`block w-full py-2 px-3 border ${
+                      errors.description ? 'border-red-300' : 'border-gray-300'
+                    } rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm`}
+                    placeholder="Enter a detailed description of the tender..."
+                    {...register('description')}
+                  />
+                </div>
+                {errors.description && (
+                  <p className="mt-1 text-sm text-red-600">{errors.description.message}</p>
+                )}
               </div>
-              {errors.description && (
-                <p className="mt-1 text-sm text-red-600">{errors.description.message}</p>
-              )}
             </div>
 
             <div className="flex justify-end space-x-3">
