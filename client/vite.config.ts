@@ -10,7 +10,7 @@ export default defineConfig({
   server: {
     proxy: {
       '/api': {
-        target: 'https://anvidha.onrender.com/api',
+        target: 'https://anvidha.onrender.com',
         changeOrigin: true,
         secure: false,
       },
