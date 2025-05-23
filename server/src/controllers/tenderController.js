@@ -118,7 +118,7 @@ export const updateTender = asyncHandler(async (req, res) => {
     }
 
     // Check if user has permission to update
-    if (tender.submittedBy.toString() !== req.user._id.toString() && req.user.role !== 'admin') {
+    if (tender.submittedBy.toString() !== req.user._id.toString() && req.user.role !== 'admin'||req.user.role !== 'user') {
       res.status(403);
       throw new Error('Not authorized to update this tender');
     }
