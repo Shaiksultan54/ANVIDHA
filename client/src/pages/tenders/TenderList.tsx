@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { FileText, Filter, Search, IndianRupee } from 'lucide-react';
 import { Tender } from '../../types';
@@ -7,6 +7,7 @@ import { useAuth } from '../../context/AuthContext';
 
 const TenderList: React.FC = () => {
   const [tenders, setTenders] = useState<Tender[]>([]);
+  const [filteredTenders, setFilteredTenders] = useState<Tender[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
@@ -16,11 +17,13 @@ const TenderList: React.FC = () => {
   useEffect(() => {
     const fetchTenders = async () => {
       try {
-        const { tenders } = await getAllTenders();
-        const sortedTenders = [...tenders].sort(
-          (a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime()
+        const data = await getAllTenders();
+        // Sort tenders by due date
+        const sortedTenders = data.sort((a, b) => 
+          new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime()
         );
         setTenders(sortedTenders);
+        setFilteredTenders(sortedTenders);
       } catch (error) {
         console.error('Error fetching tenders:', error);
       } finally {
@@ -31,17 +34,29 @@ const TenderList: React.FC = () => {
     fetchTenders();
   }, []);
 
-  const filteredTenders = useMemo(() => {
-    return tenders.filter(tender => {
-      const matchesStatus = statusFilter === 'all' || tender.status === statusFilter;
-      const matchesSearch = searchTerm === '' ||
-        tender.organization.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        tender.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        tender.tenderId.toLowerCase().includes(searchTerm.toLowerCase());
-      return matchesStatus && matchesSearch;
-    });
+  useEffect(() => {
+    let result = tenders;
+    
+    // Filter by status
+    if (statusFilter !== 'all') {
+      result = result.filter(tender => tender.status === statusFilter);
+    }
+    
+    // Filter by search term
+    if (searchTerm) {
+      const lowerCaseSearchTerm = searchTerm.toLowerCase();
+      result = result.filter(
+        tender =>
+          tender.organization.toLowerCase().includes(lowerCaseSearchTerm) ||
+          tender.description.toLowerCase().includes(lowerCaseSearchTerm) ||
+          tender.tenderId.toLowerCase().includes(lowerCaseSearchTerm)
+      );
+    }
+    
+    setFilteredTenders(result);
   }, [tenders, searchTerm, statusFilter]);
 
+  // Helper function to format date
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString('en-US', {
       year: 'numeric',
@@ -50,11 +65,15 @@ const TenderList: React.FC = () => {
     });
   };
 
+  // Helper function to get status badge color
   const getStatusBadgeClass = (status: string) => {
     switch (status) {
-      case 'approved': return 'bg-green-100 text-green-800';
-      case 'rejected': return 'bg-red-100 text-red-800';
-      default: return 'bg-yellow-100 text-yellow-800';
+      case 'approved':
+        return 'bg-green-100 text-green-800';
+      case 'rejected':
+        return 'bg-red-100 text-red-800';
+      default:
+        return 'bg-yellow-100 text-yellow-800';
     }
   };
 
@@ -64,7 +83,9 @@ const TenderList: React.FC = () => {
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Tenders</h1>
           <p className="mt-1 text-sm text-gray-600">
-            {isAdmin ? 'View and manage all tenders in the system' : 'Browse available tenders and track your submissions'}
+            {isAdmin 
+              ? 'View and manage all tenders in the system' 
+              : 'Browse available tenders and track your submissions'}
           </p>
         </div>
         {isAdmin && (
@@ -78,6 +99,7 @@ const TenderList: React.FC = () => {
         )}
       </header>
 
+      {/* Filters */}
       <div className="bg-white shadow rounded-lg p-4">
         <div className="flex flex-col md:flex-row space-y-4 md:space-y-0 md:space-x-4">
           <div className="flex-1 relative">
@@ -92,7 +114,7 @@ const TenderList: React.FC = () => {
               onChange={(e) => setSearchTerm(e.target.value)}
             />
           </div>
-
+          
           <div className="w-full md:w-64">
             <div className="relative">
               <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
@@ -113,6 +135,7 @@ const TenderList: React.FC = () => {
         </div>
       </div>
 
+      {/* Tender List */}
       <div className="bg-white shadow rounded-lg overflow-hidden">
         {isLoading ? (
           <div className="p-4 flex justify-center">
@@ -123,20 +146,38 @@ const TenderList: React.FC = () => {
             <table className="min-w-full divide-y divide-gray-200">
               <thead className="bg-gray-50">
                 <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tender ID</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Organization</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Due Date</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Price</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                  <th className="px-6 py-3"></th>
+                  <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Tender ID
+                  </th>
+                  <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Organization
+                  </th>
+                  <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Due Date
+                  </th>
+                  <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Price
+                  </th>
+                  <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Status
+                  </th>
+                  <th scope="col" className="relative px-6 py-3">
+                    <span className="sr-only">View</span>
+                  </th>
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
-                {filteredTenders.map(tender => (
+                {filteredTenders.map((tender) => (
                   <tr key={tender._id} className="hover:bg-gray-50">
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{tender.tenderId}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{tender.organization}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{formatDate(tender.dueDate)}</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                      {tender.tenderId}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      {tender.organization}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      {formatDate(tender.dueDate)}
+                    </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                       <div className="flex items-center">
                         <IndianRupee className="h-4 w-4 text-gray-400 mr-1" />

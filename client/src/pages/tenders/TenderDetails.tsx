@@ -145,7 +145,7 @@ const TenderDetails: React.FC = () => {
         attributes: isuser ? tender?.attributes || [] : [],
       };
 
-      const updatedTender = await updateTender(id, updateData, user?.role ?? "user");
+      const updatedTender = await updateTender(id, updateData);
       setTender(updatedTender);
       setIsEditing(false);
       toast.success('Tender updated successfully');

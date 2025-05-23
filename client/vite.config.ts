@@ -7,14 +7,6 @@ export default defineConfig({
   optimizeDeps: {
     exclude: ['lucide-react'],
   },
-  server: {
-    proxy: {
-      '/api': {
-        target: 'https://anvidha.onrender.com',
-        changeOrigin: true,
-        secure: false,
-      },
-    },
-  },
+
 
 });

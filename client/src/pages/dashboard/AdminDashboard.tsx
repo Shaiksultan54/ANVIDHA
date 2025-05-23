@@ -14,9 +14,7 @@ const AdminDashboard: React.FC = () => {
     const fetchTenders = async () => {
       try {
         const data = await getAllTenders();
-          // ✅ Protect against undefined
-         setTenders(data?.tenders || []);
-         console.log('Tenders:', data.tenders);
+        setTenders(data);
       } catch (error) {
         console.error('Error fetching tenders:', error);
       } finally {
@@ -26,7 +24,6 @@ const AdminDashboard: React.FC = () => {
 
     fetchTenders();
   }, []);
-  
 
   // Count tenders by status
   const pendingTenders = tenders.filter(tender => tender.status === 'pending').length;

@@ -1,7 +1,7 @@
 import axios from 'axios';
 import { toast } from 'react-hot-toast';
 
-const apiUrl = import.meta.env.VITE_API_URL || 'https://anvidha.onrender.com/api';
+const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
 
 const api = axios.create({
   baseURL: apiUrl,
@@ -10,12 +10,23 @@ const api = axios.create({
   },
 });
 
+// Add token to requests
+api.interceptors.request.use((config) => {
+  const token = localStorage.getItem('token');
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`;
+  }
+  return config;
+});
+
 // Response interceptor for error handling
 api.interceptors.response.use(
   (response) => response,
   (error) => {
-    // Don't show toast for auth endpoints or if the request was cancelled
-    if (!error.config?.url?.includes('/auth/') && !axios.isCancel(error)) {
+    console.error('API Error:', error.response?.data || error.message);
+    
+    // Don't show toast for auth endpoints
+    if (!error.config?.url?.includes('/auth/')) {
       const message = 
         error.response?.data?.message || 
         'Something went wrong. Please try again.';
