@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { Tender, TenderFormData } from '../types';
+import { TenderFormData } from '../types';
 
 const api = axios.create({
   baseURL: '/api/tenders',
